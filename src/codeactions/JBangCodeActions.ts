@@ -2,7 +2,7 @@ import { CancellationToken, CodeAction, CodeActionContext, CodeActionKind, CodeA
 import { JBANG_ADD_MISSING_DEPENDENCY } from "../CommandManager";
 import { SUPPORTED_LANGUAGES, isJBangFile } from "../JBangUtils";
 
-const UNRESOLVED_TYPE = 'Java(16777218)';
+const UNRESOLVED_TYPE = '16777218';
 const UNRESOLVED_IMPORT = '268435846';
 
 export class JBangCodeActions implements CodeActionProvider {
@@ -23,7 +23,7 @@ export class JBangCodeActions implements CodeActionProvider {
     if (!SUPPORTED_LANGUAGES.includes(document.languageId)) {
       return [];
     }
-    const unresolvedTypes = context.diagnostics.filter(d => "Java" === d.source && UNRESOLVED_IMPORT === d.code);
+    const unresolvedTypes = context.diagnostics.filter(d => "Java" === d.source && (UNRESOLVED_IMPORT === d.code || UNRESOLVED_TYPE === d.code));
     
     if (unresolvedTypes.length === 0 || !isJBangFile(document.getText().split(/\r?\n/))){
       return [];
@@ -38,8 +38,9 @@ export class JBangCodeActions implements CodeActionProvider {
   }
 
   private createCommandCodeAction(diagnostic: Diagnostic, document: TextDocument): CodeAction | undefined {
-    const regex = /import (.*) cannot be resolved/;
-    const match = diagnostic.message.match(regex);
+    const unresolvedImportRegex = /import (\S+) cannot be resolved/;
+    const unresolvedTypeRegex = /(\S+) cannot be resolved to a type/;
+    let match = diagnostic.message.match(unresolvedImportRegex);
     if (match && match[1]) {
       const importLine = document.lineAt(diagnostic.range.start.line).text;
       const semiCol = importLine.indexOf(";");
@@ -53,6 +54,15 @@ export class JBangCodeActions implements CodeActionProvider {
         action.diagnostics = [diagnostic];
         return action;
       }
+    }
+    match = diagnostic.message.match(unresolvedTypeRegex);
+    if (match && match[1]) {
+      let missingClass = match[1];
+      const title = `Find '${missingClass}' dependency...`;
+      const action = new CodeAction(title, CodeActionKind.QuickFix);
+      action.command = { command: JBANG_ADD_MISSING_DEPENDENCY, title, tooltip: title, arguments: [document.uri, missingClass] };
+      action.diagnostics = [diagnostic];
+      return action;
     }
 	}
 

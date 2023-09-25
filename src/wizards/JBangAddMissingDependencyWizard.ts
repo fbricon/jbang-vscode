@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig, CancelTokenSource } from 'axios';
-import { Position, ProgressLocation, QuickPickItem, Range, TextDocument, TextEdit, Uri, WorkspaceEdit, window, workspace } from "vscode";
+import { Position, ProgressLocation, QuickPickItem, Range, TextDocument, TextEdit, Uri, WorkspaceEdit, commands, window, workspace } from "vscode";
 import { DEPS_PREFIX } from '../JBangUtils';
 import { version } from '../extension';
 import { compareVersions } from '../models/Version';
@@ -69,8 +69,9 @@ export default class JBangAddMissingDependencyWizard {
             missingClass = missingClass.substring(0, missingClass.length - 2);
         }
         const searchType = missingClass.includes('.') ? 'fc' : 'c';
-        const searchQuery = `https://search.maven.org/solrsearch/select?&rows=200&wt=json&q=${searchType}:${missingClass}`;
-        
+        const rows = missingClass.includes('.') ? '200' : '100';
+        const searchQuery = `https://search.maven.org/solrsearch/select?&rows=${rows}&wt=json&q=${searchType}:${missingClass}`;
+        console.log(searchQuery);
         try {
             const response = await axios.get(searchQuery, {
                 ...axiosConfig,
@@ -103,9 +104,14 @@ export default class JBangAddMissingDependencyWizard {
 
             const workspaceEdit = new WorkspaceEdit();
             workspaceEdit.set(this.uri, [textEdit]);
-            return workspace.applyEdit(workspaceEdit).then(success => {
+            return workspace.applyEdit(workspaceEdit).then(async success => {
                 if (success) {
-                    return document.save();
+                    await document.save();
+                    // Dirty, unreliable hack to trigger import once the dependency has been added
+                    setTimeout(() => {
+                        // or silent import java.edit.organizeImports?
+                        return commands.executeCommand("java.action.organizeImports", this.uri);
+                    }, 3000);
                 }
             });
         }
