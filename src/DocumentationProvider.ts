@@ -1,11 +1,11 @@
-import axios, { AxiosRequestConfig } from "axios";
 import { XMLParser } from "fast-xml-parser";
 import * as fs from 'fs/promises';
 import { LRUCache } from "lru-cache";
 import { MarkdownString } from "vscode";
 import { CancellationToken } from "vscode-languageclient";
-import { version } from "./extension";
+
 import { Dependency, getLocalFile, getRemoteMetadata, getRemoteUrl } from "./models/Dependency";
+import { getText } from "./utils/httpClient";
 
 const cacheTTL = 1000 * 60 * 10; // 10 min
 const DOC_CACHE = new LRUCache<string, MarkdownString>({
@@ -33,10 +33,6 @@ const LATEST_VERSIONS_CACHE = new LRUCache<string, string>({
     // return stale items before removing from cache?
     allowStale: false,
 });
-
-const axiosConfig: AxiosRequestConfig<any> = {
-    httpsAgent: 'jbang-vscode v' + version
-};
 
 const NO_DOC = new MarkdownString('');
 
@@ -73,7 +69,7 @@ export class DocumentationProvider {
         }
         return doc;
     }
-    
+
     private async loadPom(dependency: Dependency): Promise<any> {
         let realVersion = dependency.version;
         if (dependency.version === 'LATEST') {
@@ -82,7 +78,7 @@ export class DocumentationProvider {
                 return undefined;
             }
         }
-        const filePath = getLocalFile(dependency.groupId, dependency.artifactId, realVersion); 
+        const filePath = getLocalFile(dependency.groupId, dependency.artifactId, realVersion);
         if (!filePath) {
             return undefined;
         }
@@ -92,13 +88,13 @@ export class DocumentationProvider {
         } catch (error) {
             const pomUrl = getRemoteUrl(dependency.groupId, dependency.artifactId, realVersion);
             if (pomUrl) {
-                xml = await fetchData(pomUrl);
+                xml = await getText(pomUrl);
                 //TODO save xml locally to prevent future remote calls
             }
         }
         return parseXML(xml);
     }
-    
+
     private toMarkdown(xml?: string): string|undefined {
         if (!xml) {
             return undefined;
@@ -109,21 +105,15 @@ export class DocumentationProvider {
     private minimizeIndentation(inputText: string): string {
         //Need to minimize indentation, or else the doc looks like crap
         //See https://github.com/stleary/JSON-java/blob/92991770ca9f5e12d687bd9f6147d10e8baedd2e/pom.xml#L10-L21
-        
+
         // Split the input text into lines
         const lines = inputText.split('\n');
-        const result = lines.map(l => l.trim()).join('\n'); 
+        const result = lines.map(l => l.trim()).join('\n');
         return result;
     }
 }
 
 export default new DocumentationProvider();
-
-async function fetchData(uri: string): Promise<string|undefined> {
-    console.log(`Fetching ${uri}`);
-    const response = await axios.get(uri, axiosConfig);
-    return response.data;
-}
 
 async function findLatestVersion(dependency: Dependency): Promise<string|undefined> {
     const key = dependency.groupId+":"+dependency.artifactId;
@@ -155,7 +145,7 @@ async function loadMetadata(dependency: Dependency): Promise<string|undefined> {
     if (!metadataUrl) {
         return undefined;
     }
-    return fetchData(metadataUrl);
+    return getText(metadataUrl);
 }
 
 function parseXML(xml?: string): any {

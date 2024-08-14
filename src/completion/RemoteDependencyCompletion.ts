@@ -1,23 +1,17 @@
-import axios, { AxiosRequestConfig } from "axios";
 import { LRUCache } from "lru-cache";
 import { CancellationToken, Command, CompletionContext, CompletionItem, CompletionItemKind, CompletionList, Position, Range, TextDocument } from "vscode";
 import { JBANG_SAVE_SCRIPT } from "../CommandManager";
 import JBangConfig from "../JBangConfig";
 import { DEPS } from "../JBangDirectives";
 import { DEPS_PREFIX } from "../JBangUtils";
-import { version } from "../extension";
 import { Dependency } from "../models/Dependency";
 import { compareVersions } from "../models/Version";
+import { getJson } from "../utils/httpClient";
 import { CompletionParticipant, EMPTY_LIST, JBangCompletionItem } from "./CompletionParticipant";
 import { TextHelper } from "./TextHelper";
 
 const MAX_RESULTS = 100;
 const SEARCH_API = `https://search.maven.org/solrsearch/select?rows=${MAX_RESULTS}&wt=json&q=`;
-
-const axiosConfig: AxiosRequestConfig<any> = {
-    httpsAgent: 'jbang-vscode v' + version,
-    timeout: 5000
-};
 
 const QUERY_CACHE = new LRUCache<string, CompletionList>({
     max: 500,
@@ -46,7 +40,7 @@ export class RemoteDependencyCompletion implements CompletionParticipant {
         }
         const start = TextHelper.findStartPosition(lineText, position, DEPS_PREFIX);
         const currText = lineText.substring(start.character, position.character).trim();
-        if (currText.length === 0 
+        if (currText.length === 0
             || currText.startsWith('.') // local search, we bail
             ) {
            return EMPTY_LIST;
@@ -87,8 +81,8 @@ export class RemoteDependencyCompletion implements CompletionParticipant {
         }
         const end = TextHelper.findEndPosition(lineText, position);
         let result: CompletionList;
-        const saveCommand = JBangConfig.isSaveOnSelectEnabled() ? 
-        { command: JBANG_SAVE_SCRIPT, title: "Save", arguments: [document.uri] } 
+        const saveCommand = JBangConfig.isSaveOnSelectEnabled() ?
+        { command: JBANG_SAVE_SCRIPT, title: "Save", arguments: [document.uri] }
         : undefined;
         switch (parts.length) {
             case 1://has groupid or searches name
@@ -138,8 +132,8 @@ function toVersionCompletionItem(gav: any, index: number, range: Range, command?
 async function searchAll(name: string): Promise<any> {
     const searchQuery = `${SEARCH_API}${name}*+OR+a:${name}*+OR+g:${name}*`;
     console.log(searchQuery);
-    const response = await axios.get(searchQuery, axiosConfig);
-    return response?.data?.response;
+    const response = await getJson(searchQuery);
+    return response?.response;
 }
 
 async function searchArtifactId(groupId: string, artifactId: string): Promise<any> {
@@ -149,8 +143,8 @@ async function searchArtifactId(groupId: string, artifactId: string): Promise<an
     }
     const searchQuery = SEARCH_API + queryString;
     console.log(searchQuery);
-    const response = await axios.get(searchQuery, axiosConfig);
-    return response.data?.response;
+    const response = await getJson(searchQuery);
+    return response?.response;
 }
 
 async function searchVersion(groupId: string, artifactId: string, version: string): Promise<any> {
@@ -161,8 +155,8 @@ async function searchVersion(groupId: string, artifactId: string, version: strin
     }
     searchQuery += '&core=gav';
     console.log(searchQuery);
-    const response = (await axios.get(searchQuery, axiosConfig))?.data?.response;
-    // Apparently there's no way to ask solrsearch to return versions sorted by version desc, 
+    const response = (await getJson(searchQuery))?.response;
+    // Apparently there's no way to ask solrsearch to return versions sorted by version desc,
     // so we do it manually
     if (response?.docs) { //Sort by decreasing version
         const sortedVersions = response.docs.sort(compareArtifactVersions);

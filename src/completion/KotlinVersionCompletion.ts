@@ -1,16 +1,12 @@
-import axios, { AxiosRequestConfig } from "axios";
 import { CancellationToken, CompletionContext, CompletionItemKind, CompletionList, Position, Range, TextDocument } from "vscode";
 import { KOTLIN } from "../JBangDirectives";
-import { version } from "../extension";
 import { compareVersionsDesc } from "../models/Version";
+import { getJson } from "../utils/httpClient";
 import { CompletionParticipant, EMPTY_LIST } from "./CompletionParticipant";
 import { TextHelper } from "./TextHelper";
 
 const SEARCH_API = `https://api.github.com/repos/JetBrains/kotlin/releases`;
 const UPDATE_PERIOD = 60 * 60 * 1000; // 1h
-const axiosConfig: AxiosRequestConfig<any> = {
-    httpsAgent: 'jbang-vscode v' + version
-};
 
 let VERSIONS: string[];
 let lastUpdate = 0;
@@ -44,8 +40,7 @@ export class KotlinVersionCompletion implements CompletionParticipant {
 
 async function searchVersions(): Promise<string[]> {
     console.log("Fetching Kotlin versions");
-    const response = await axios.get(SEARCH_API, axiosConfig);
-    const releases = response?.data;
+    const releases = await getJson(SEARCH_API);
     if (releases) { //Already sorted by decreasing versions
         const versions = releases.map((r:any) => {
             const version = r?.tag_name?.replace('v', '') as string;
